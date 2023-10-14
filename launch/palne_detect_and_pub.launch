@@ -1,0 +1,11 @@
+<launch>
+  <!-- <node launch-prefix="xterm -e" pkg="ORB_SLAM2" type="pubPointCloud2" name="map_publisher" required="false" output="screen"/> -->
+
+  <!-- <node pkg="ORB_SLAM2" type="rgbd_tum_ros" name="rgbd_ros" required="false" output="screen"/> -->
+
+  <node launch-prefix="nice" pkg="rviz" type="rviz" name="rviz" args="-d $(find palne_detect_and_pub)/rviz/palne_detect_and_pub.rviz" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="camera_to_lidar" args="0 0.0052 -2595 0.0 0.25038 0.0 0.96814764  /camera /velodyne"/>
+  <!-- <include file="$(find ORB_SLAM2)/launch/octomaptransform.launch" /> -->
+</launch>
+
+
