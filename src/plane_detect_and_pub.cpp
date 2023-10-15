@@ -181,13 +181,13 @@ vector<Eigen::Vector3d> fitRect(pcl::PointCloud<pcl::PointXYZ>& cloud_hull, Eige
         break;
     }
   }
-  cout<<"the cor point is "<<x_point(0)<<" "<<x_point(1)<<" "<<x_point(2)<<endl;
+//   cout<<"the cor point is "<<x_point(0)<<" "<<x_point(1)<<" "<<x_point(2)<<endl;
   Eigen::Vector3d x_axid = (x_point - center_eigen).normalized();
   Eigen::Vector3d y_axid = (normal.cross(x_axid)).normalized();
 
-  cout<<"x : "<<x_axid.transpose()<<endl;
-  cout<<"y : "<<y_axid.transpose()<<endl;
-  cout<<"z : "<<z_axid.transpose()<<endl;
+//   cout<<"x : "<<x_axid.transpose()<<endl;
+//   cout<<"y : "<<y_axid.transpose()<<endl;
+//   cout<<"z : "<<z_axid.transpose()<<endl;
   // 从定义的平面坐标系到世界坐标系
   Eigen::Matrix3d rotation2W;
 
@@ -356,6 +356,17 @@ private:
 
             Eigen::Vector3d center_eigen(tmpCenterPoint.x, tmpCenterPoint.y, tmpCenterPoint.z);
             vector<Eigen::Vector3d> rectPoint = fitRect(*cloud_hull, normal, center_eigen);
+            double length0 = (rectPoint[0] - rectPoint[1]).norm();
+            double length1 = (rectPoint[1] - rectPoint[2]).norm();
+            double length2 = (rectPoint[2] - rectPoint[3]).norm();
+            double length3 = (rectPoint[3] - rectPoint[0]).norm();
+            std::cout << "----------对于平面 " << to_string(i) << ": ----------" << std::endl;
+            std::cout << "Point0: " <<  rectPoint[0].transpose() << std::endl;
+            std::cout << "Point1: " <<  rectPoint[1].transpose() << std::endl;
+            std::cout << "Point2: " <<  rectPoint[2].transpose() << std::endl;
+            std::cout << "Point3: " <<  rectPoint[3].transpose() << std::endl;
+            std::cout << "4 Edges' length: " << length0 << ", " << length1 << ", " << length2 << ", " << length3 << std::endl;
+            std::cout << "Center Point is: " << center_eigen.transpose() << std::endl;
             int k = 0;
             for(int j = 0; j < plane_points->size(); j ++)
             {
@@ -464,6 +475,29 @@ private:
 
 int main(int argc, char** argv)
 {
+    // Eigen::Isometry3d M;
+    // double theta = 152.5/57.3;
+    // M.matrix() << 0, cos(theta), sin(theta), 0.1412,
+    //            -1, 0, 0, 0,
+    //            0, -sin(theta), cos(theta), -0.2474,
+    //            0, 0, 0, 1;
+    // std::cout << M.matrix() << std::endl;
+    // std::cout << "----------------" << std::endl;
+    // std::cout << M.inverse().matrix() << std::endl;
+    //     std::cout << "----------------" << std::endl;
+    // Eigen::Vector3d euler_angles = M.inverse().rotation().eulerAngles(0, 2, 1); // ZYX顺序
+    // std::cout << "----------------" << std::endl;
+    // std::cout << "Translation (m): " << M.inverse().translation().transpose() << std::endl;
+    // std::cout << "Euler angles (rad): " << euler_angles.transpose() << std::endl;
+
+    // // 将弧度转换为角度
+    // Eigen::Vector3d euler_angles_deg = euler_angles * 180.0 / M_PI;
+    // std::cout << "Euler angles (deg): " << euler_angles_deg.transpose() << std::endl;
+    // Eigen::Quaterniond quaternion(M.inverse().matrix().block<3, 3>(0, 0));
+    // std::cout << "Quaternion: " << quaternion.coeffs().transpose() << std::endl;
+    // Eigen::Quaterniond quaternion0(M.matrix().block<3, 3>(0, 0));
+    // std::cout << "Quaternion0: " << quaternion0.coeffs().transpose() << std::endl;
+
     ros::init(argc, argv, "color_pointcloud_publisher");
     PlaneDetectAndPub PDAP;
     ros::spin();
