@@ -383,19 +383,29 @@ private:
         std::vector<pcl::PointXYZ> allCenterPoint(maxLabel+1);
 
         //遍历所有的标签，看看法向量
-
+        vector<float> planeHeight;
+        
         for(int i = 0; i <= maxLabel; i++)
         {
             myPointCloud::Ptr tmp1 = pcl::make_shared<myPointCloud>();
             tmp1->points.reserve(imgDepth.cols * imgDepth.rows);
             tmp1->is_dense = false;
             allPlanes.push_back(tmp1);
+            if(i == 0)
+            {
+                planeHeight.push_back(100);
+            }
+            else
+            {
+                planeHeight.push_back(planeNormalAndCenter[i][5]);
+            }
+            
             std::cout << "第" << i << "个平面的法向量为：" << planeNormalAndCenter[i].head(3).transpose() << std::endl;
             std::cout << "第" << i << "个平面的中心点为：" << planeNormalAndCenter[i][3] << ", " << planeNormalAndCenter[i][4] << ", " <<
                       planeNormalAndCenter[i][5] << std::endl;
         }
-        // vector<float> zValues;
-        
+
+
         vector<cv::Scalar> colorTab = get_color(maxLabel);
         myPointCloud::Ptr CloudNoGround  = pcl::make_shared<myPointCloud>();
         for(int row = 0; row < height; row++)
