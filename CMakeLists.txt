@@ -22,6 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   cv_bridge
   image_transport
+  tf
 )
 find_package(PCL REQUIRED)
 find_package(Eigen3 3.1.0 REQUIRED NO_MODULE)

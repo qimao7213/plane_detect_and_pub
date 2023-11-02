@@ -23,9 +23,12 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/filters/passthrough.h>
 #include "plane_fitter_pcl.hpp"
 #include "AHCPlaneSeg.hpp"
 #include "lshaped_fitting.h"
+#include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
 const cv::Size imgSize(640, 480);
 const int width = 640;
 const int height = 480;
@@ -132,6 +135,25 @@ vector<cv::Scalar> get_color(int n){
 	return colors;
 }
 
+int findMinIndex(const std::vector<float>& zValues) {
+    if (zValues.empty()) {
+        std::cerr << "Vector is empty." << std::endl;
+        return -1;  // Return -1 to indicate an error or empty vector
+    }
+
+    float minVal = std::numeric_limits<float>::max();  // Initialize with a large value
+    int minIndex = -1;  // Initialize with an invalid index
+
+    for (size_t i = 0; i < zValues.size(); ++i) {
+        if (zValues[i] < minVal) {
+            minVal = zValues[i];
+            minIndex = static_cast<int>(i);
+        }
+    }
+
+    return minIndex;
+}
+
 void getPlanePoints(pcl::PointCloud<pcl::PointXYZ>::Ptr planepoints, Eigen::Vector3d& normal, pcl::PointCloud<pcl::PointXYZ>::Ptr cloud, pcl::PointXYZ& center)
 {
   planepoints->reserve(cloud->size());
@@ -181,13 +203,13 @@ vector<Eigen::Vector3d> fitRect(pcl::PointCloud<pcl::PointXYZ>& cloud_hull, Eige
         break;
     }
   }
-  cout<<"the cor point is "<<x_point(0)<<" "<<x_point(1)<<" "<<x_point(2)<<endl;
+//   cout<<"the cor point is "<<x_point(0)<<" "<<x_point(1)<<" "<<x_point(2)<<endl;
   Eigen::Vector3d x_axid = (x_point - center_eigen).normalized();
   Eigen::Vector3d y_axid = (normal.cross(x_axid)).normalized();
 
-  cout<<"x : "<<x_axid.transpose()<<endl;
-  cout<<"y : "<<y_axid.transpose()<<endl;
-  cout<<"z : "<<z_axid.transpose()<<endl;
+//   cout<<"x : "<<x_axid.transpose()<<endl;
+//   cout<<"y : "<<y_axid.transpose()<<endl;
+//   cout<<"z : "<<z_axid.transpose()<<endl;
   // 从定义的平面坐标系到世界坐标系
   Eigen::Matrix3d rotation2W;
 
@@ -217,27 +239,122 @@ vector<Eigen::Vector3d> fitRect(pcl::PointCloud<pcl::PointXYZ>& cloud_hull, Eige
   return edgePoints;
 }
 
+// double calDistance(const Eigen::Vector3d& p1, const Eigen::Vector3d& p2)
+// {
+//     p1.no
+//     double disdis = 
+// }
 class PlaneDetectAndPub
 {
 private:
     ros::NodeHandle nh;
     ros::Publisher pcl_pub1;
     ros::Publisher pcl_pub2;
+    ros::Publisher pcl_pub3;
     ros::Publisher markarry_pub;
     ros::Subscriber imgDepth_sub;
+    tf::TransformListener listener_;
+    tf::StampedTransform transform_;
+    tf::TransformListener listener2_;
+    tf::StampedTransform transform2_;
+    geometry_msgs::PoseStamped T_w_c;
+    geometry_msgs::PoseStamped T_w_l;
+    // Eigen::Isometry3d Twc;
 public:
     PlaneDetectAndPub(): nh("~")
     {
         pcl_pub1 = nh.advertise<sensor_msgs::PointCloud2>("plane_points", 10);
         pcl_pub2 = nh.advertise<sensor_msgs::PointCloud2>("edge_points", 10);
+        pcl_pub3 = nh.advertise<sensor_msgs::PointCloud2>("no_ground_points", 10);
         markarry_pub = nh.advertise<visualization_msgs::MarkerArray>("plane_edge",10);
-        imgDepth_sub = nh.subscribe<sensor_msgs::Image>("/camera/depth/image_rect_raw", 10, &PlaneDetectAndPub::imagCallback, this);
+        imgDepth_sub = nh.subscribe<sensor_msgs::Image>("/camera/depth/image_rect_raw", 1, &PlaneDetectAndPub::imagCallback, this);
     }
 
 
 private:
     void imagCallback(const sensor_msgs::ImageConstPtr& depthImageMsg)
     {
+        try
+        {
+            listener2_.waitForTransform("3dmap", "velodyne", ros::Time::now(), ros::Duration(0.5));
+            std::cout << "--------------------------------" << std::endl;
+            listener2_.lookupTransform ("3dmap", "velodyne", ros::Time::now(), transform2_);
+        }
+        catch(tf::TransformException &ex)
+        {
+            ROS_ERROR("%s", ex.what());
+            return;
+        }
+        std::cout << transform2_.getRotation().x() << ", " << transform2_.getRotation().y()  << ", " << transform2_.getRotation().z()  << ", " <<  transform2_.getRotation().w() << std::endl;
+        double qx = transform2_.getRotation().x();
+        double qy = transform2_.getRotation().y();
+        double qz = transform2_.getRotation().z();
+        double qw = transform2_.getRotation().w();
+        double R[3][3] = {
+        {1 - 2 * (qy*qy + qz*qz), 2 * (qx*qy - qz*qw), 2 * (qx*qz + qy*qw)},
+        {2 * (qx*qy + qz*qw), 1 - 2 * (qx*qx + qz*qz), 2 * (qy*qz - qx*qw)},
+        {2 * (qx*qz - qy*qw), 2 * (qy*qz + qx*qw), 1 - 2 * (qx*qx + qy*qy)}};
+
+        // 计算欧拉角（XYZ顺序）
+        double roll = atan2(R[2][1], R[2][2]);
+        double pitch = atan2(-R[2][0], sqrt(R[2][1]*R[2][1] + R[2][2]*R[2][2]));
+        double yaw = atan2(R[1][0], R[0][0]);
+
+        // 将弧度转化为度
+        roll = roll * 180.0 / M_PI;
+        pitch = pitch * 180.0 / M_PI;
+        yaw = yaw * 180.0 / M_PI;
+
+        // 输出欧拉角
+        std::cout << "Roll: " << roll << " degrees" << std::endl;
+        std::cout << "Pitch: " << pitch << " degrees" << std::endl;
+        std::cout << "Yaw: " << yaw << " degrees" << std::endl;
+        T_w_l.pose.orientation.x = transform2_.getRotation().x();
+        T_w_l.pose.orientation.y = transform2_.getRotation().y();
+        T_w_l.pose.orientation.z = transform2_.getRotation().z();
+        T_w_l.pose.orientation.w = transform2_.getRotation().w();
+        T_w_l.pose.position.x = transform2_.getOrigin().x();
+        T_w_l.pose.position.y = transform2_.getOrigin().y();
+        T_w_l.pose.position.z = transform2_.getOrigin().z();
+        Eigen::Vector3d t_w_l(T_w_l.pose.position.x, T_w_l.pose.position.y, T_w_l.pose.position.z);
+        Eigen::Quaterniond q_w_l(T_w_l.pose.orientation.w, T_w_l.pose.orientation.x, T_w_l.pose.orientation.y, T_w_l.pose.orientation.z);
+        Eigen::Isometry3d Twl(q_w_l);
+        Twl.pretranslate(t_w_l);
+        // double q0 = w;
+        // double q1 = x;
+        // double q2 = y;
+        // double q3 = z;
+        // double roll_deg = 1 * std::atan2(2*q2*q3 + 2*q0*q1, -2 * q1 * q1 -2 * q2 * q2 + 1) * 57.3;
+        // double pitch_deg = 1 * std::asin(2*q0*q2 - 2*q3*q1) * 57.3;
+        // double yaw_deg = 1 * std::atan2(2*q1*q2 + 2*q0*q3, -2 * q2 * q2 -2 * q3 * q3 + 1) * 57.3;
+        // std::cout << "Roll: " << roll_deg << " degrees" << std::endl;
+        // std::cout << "Pitch: " << pitch_deg << " degrees" << std::endl;
+        // std::cout << "Yaw: " << yaw_deg << " degrees" << std::endl;
+
+        try
+        {
+            listener_.waitForTransform("3dmap", "camera", ros::Time::now(), ros::Duration(0.5));
+            // std::cout << "--------------------------------" << std::endl;
+            listener_.lookupTransform ("3dmap", "camera", ros::Time::now(), transform_);
+        }
+        catch(tf::TransformException &ex)
+        {
+            ROS_ERROR("%s", ex.what());
+            return;
+        }
+        T_w_c.pose.orientation.x = transform_.getRotation().x();
+        T_w_c.pose.orientation.y = transform_.getRotation().y();
+        T_w_c.pose.orientation.z = transform_.getRotation().z();
+        T_w_c.pose.orientation.w = transform_.getRotation().w();
+        T_w_c.pose.position.x = transform_.getOrigin().x();
+        T_w_c.pose.position.y = transform_.getOrigin().y();
+        T_w_c.pose.position.z = transform_.getOrigin().z();
+        Eigen::Vector3f t(T_w_c.pose.position.x, T_w_c.pose.position.y, T_w_c.pose.position.z);
+        Eigen::Quaternionf q(T_w_c.pose.orientation.w, T_w_c.pose.orientation.x, T_w_c.pose.orientation.y, T_w_c.pose.orientation.z);
+        Eigen::Isometry3f Twc(q);
+        Twc.pretranslate(t);
+        // std::cout << Twc.matrix() << std::endl;
+        // std::cout << T_w_c.pose.orientation.
         std::chrono::steady_clock::time_point t0, t1, t2, t3;
         cv_bridge::CvImagePtr cv_ptr;
         try
@@ -251,6 +368,7 @@ private:
         }
 
         cv::Mat imgDepth = cv_ptr->image;
+        double rateValid = cv::countNonZero(imgDepth) / (double)(width * height); 
         myPointCloud::Ptr Cloud = pcl::make_shared<myPointCloud>();
         Cloud->points.reserve(imgDepth.rows * imgDepth.cols);
         Cloud->is_dense = false;
@@ -264,6 +382,8 @@ private:
         PlanarContourExtraction pce(*Cloud);
         t0 = std::chrono::steady_clock::now();
         pce.run(imgSeg);
+        cv::imshow("imgSeg", imgSeg);
+        cv::waitKey(30);
         t1 = std::chrono::steady_clock::now();
         double maxLabel;
         cv::minMaxLoc(imgSeg, 0, &maxLabel);
@@ -278,7 +398,7 @@ private:
             allPlanes.push_back(tmp1);
         }
         vector<cv::Scalar> colorTab = get_color(maxLabel);
-        
+        myPointCloud::Ptr CloudNoGround  = pcl::make_shared<myPointCloud>();
         for(int row = 0; row < height; row++)
         {
             for(int col = 0; col < width; col++)
@@ -291,16 +411,18 @@ private:
                 float d = (float)imgDepth.ptr<uint16_t>(row)[col]; // 深度值
                 pcl::PointXYZRGB pointColord;
                 pcl::PointXYZ pointXYZ;
-                Eigen::Vector3f point;
+                Eigen::Vector3f point, pointTransed;
                 point[2] = (d) * (1.0f / depthScale);
                 point[0] = (col - cx) * point[2] / fx;
                 point[1] = (row - cy) * point[2] / fy;
-                pointColord.x = point[0];
-                pointColord.y = point[1];
-                pointColord.z = point[2];
-                pointXYZ.x = point[0];
-                pointXYZ.y = point[1];
-                pointXYZ.z = point[2];           
+                // point[3] = 0.0f;
+                pointTransed = Twc * point;
+                pointColord.x = pointTransed[0];
+                pointColord.y = pointTransed[1];
+                pointColord.z = pointTransed[2];
+                pointXYZ.x = pointTransed[0];
+                pointXYZ.y = pointTransed[1];
+                pointXYZ.z = pointTransed[2];           
                 // uint32_t rgbValue = encodeLabelToColor((int)label);
                 // pointColord.rgb = *reinterpret_cast<float*>(&rgbValue);
                 pointColord.r = colorTab[label][0];
@@ -312,29 +434,142 @@ private:
                 allCenterPoint[label].x += pointColord.x;
                 allCenterPoint[label].y += pointColord.y;
                 allCenterPoint[label].z += pointColord.z;
+
+                // if(row > 0.5 * height)
+                // {
+                //     CloudNoGround->points.push_back(pointXYZ);
+                // }
             }
         }
         
         myPointCloudRGB::Ptr CloudColoredOutput  = pcl::make_shared<myPointCloudRGB>();
         myPointCloudRGB::Ptr CloudEdgeOutput  = pcl::make_shared<myPointCloudRGB>();
-        CloudColoredOutput->reserve(imgDepth.cols * imgDepth.rows);
 
+        // CloudNoGround->clear();
+        CloudColoredOutput->reserve(imgDepth.cols * imgDepth.rows);
+        //通过中心点z值来判断地面
+        vector<float> zValues;
+        // zValues.push_back(100);
+        for(int i = 1; i <= maxLabel; i++)
+        {
+            zValues.push_back(allCenterPoint[i].z/(float)allPlanes[i]->size());
+        }
+        int minIndex = findMinIndex(zValues) + 1;
+        std::cout << "图像的空洞率为：  " << (100.0 - rateValid*100) << "%" << std::endl;
+        std::cout << "地面平面编号为：  " << minIndex << std::endl;
+        Eigen::Vector3d refPoint;
+        refPoint = Eigen::Vector3d(T_w_l.pose.position.x, T_w_l.pose.position.y, T_w_l.pose.position.z) - Twl * Eigen::Vector3d(0.00938, 0, 0);
+        double height_ground = zValues[minIndex - 1];
+        refPoint[2] = height_ground;
+        
+        // pcl::PassThrough<pcl::PointXYZ> passfilter;
+        // passfilter.setInputCloud(CloudNoGround);
+        // passfilter.setFilterFieldName("z");   // 设置过滤的轴，可以是"x"、"y"、"z"等
+        // passfilter.setFilterLimits(height_ground, height_ground + 1.0); 
+        // passfilter.filter(*CloudNoGround);
+        for(int row = 0; row < height; row++)
+        {
+            for(int col = 0; col < width; col++)
+            {
+                uchar label = (uchar)imgSeg.ptr<uchar>(row)[col];
+                if(label == minIndex || row > 0.5 * height)
+                {
+                    continue;
+                }
+                float d = (float)imgDepth.ptr<uint16_t>(row)[col]; // 深度值
+                pcl::PointXYZ pointXYZ;
+                Eigen::Vector3f point, pointTransed;
+                point[2] = (d) * (1.0f / depthScale);
+                point[0] = (col - cx) * point[2] / fx;
+                point[1] = (row - cy) * point[2] / fy;
+                pointTransed = Twc * point;
+                pointXYZ.x = pointTransed[0];
+                pointXYZ.y = pointTransed[1];
+                pointXYZ.z = pointTransed[2];  
+                if(label != 0)
+                {
+                    CloudNoGround->points.push_back(pointXYZ);
+                }
+                else if(pointXYZ.z > (height_ground + 0.1))
+                    CloudNoGround->points.push_back(pointXYZ);
+            }
+        }
 
         visualization_msgs::MarkerArray ma;
+        ma.markers.clear();
         t2 = std::chrono::steady_clock::now();
+        Eigen::Matrix3d rotationMatrixRefine;
+        
+
+        //检验地面法向量
+        {
+            int numPoint = allPlanes[minIndex]->size();
+            myPointCloud::Ptr cloud_filtered = pcl::make_shared<myPointCloud>();
+            pcl::VoxelGrid<pcl::PointXYZ> sor;
+            sor.setInputCloud(allPlanes[minIndex]);//给滤波对象设置需过滤的点云
+            sor.setLeafSize(0.01f, 0.01f, 0.01f);//设置滤波时创建的体素大小为1cm*1cm*1cm的立方体
+            sor.filter(*cloud_filtered);//执行滤波处理，存储输出为cloud_filtered
+
+            pcl::PointXYZ tmpCenterPoint;
+            tmpCenterPoint.x = allCenterPoint[minIndex].x/(float)numPoint;
+            tmpCenterPoint.y = allCenterPoint[minIndex].y/(float)numPoint;
+            tmpCenterPoint.z = allCenterPoint[minIndex].z/(float)numPoint;
+            myPointCloud::Ptr plane_points = pcl::make_shared<myPointCloud>();
+            Eigen::Vector3d normal;
+            getPlanePoints(plane_points, normal, cloud_filtered, tmpCenterPoint);
+            std::cout << "地面的旧法向量为：" << normal.transpose() << std::endl;
+            Eigen::Vector3d targetNormal(0, 0, 1);
+
+            rotationMatrixRefine = Eigen::Quaterniond::FromTwoVectors(normal, targetNormal).toRotationMatrix();
+            // 应用旋转矩阵到当前法向量
+            Eigen::Vector3d newNormal = rotationMatrixRefine * normal;
+            std::cout << "地面的新法向量为：" << newNormal.transpose() << std::endl;
+        }
+        Eigen::Matrix3f rotationMatrixRefineFloat = rotationMatrixRefine.inverse().cast<float>();
+        Eigen::Matrix4f transformMatrixRefine = Eigen::Matrix4f::Identity();
+        transformMatrixRefine.block<3, 3>(0, 0) = rotationMatrixRefineFloat; // 将旋转矩阵插入左上角
+        transformMatrixRefine.block<3, 1>(0, 3) = Eigen::Vector3f::Zero();
+        // std::cout << transformMatrixRefine << std::endl; 
+        // for(int i = 1; i <= maxLabel; i++)
+        // {
+        //     allCenterPoint[i] = allCenterPoint[i] * Twc.inverse().matrix() * transformMatrixRefine * Twc.matrix();
+        // }
+        Eigen::Vector3d ground_normal(0, 0, 1);
         //遍历每一个平面
         //0是没有被检测出来的区域
         for(int i = 1; i <= maxLabel; i ++)
         {
+
             int numPoint = allPlanes[i]->size();
-            if(numPoint < 1000)
+            if(numPoint < 200)
             {
-                cout<<"the number in this plan is less than 1000, discard the plane."<<endl;
+                // cout<<"the number in this plan is less than 1000, discard the plane."<<endl;
                 continue;
             }
-
+            Eigen::Matrix4f kkk = Twc.matrix() * transformMatrixRefine * Twc.inverse().matrix();
+            // std::cout << kkk << std::endl; 
+            Eigen::Matrix4d kkk_double = kkk.cast<double>();
+            Eigen::Isometry3d kkk_trans;
+            kkk_trans.matrix() = kkk_double;
             myPointCloud::Ptr cloud_filtered = pcl::make_shared<myPointCloud>();
             pcl::VoxelGrid<pcl::PointXYZ> sor;
+            // pcl::transformPointCloud(*allPlanes[i], *allPlanes[i], Twc.inverse().matrix());//先转
+            // pcl::transformPointCloud(*allPlanes[i], *allPlanes[i], transformMatrixRefine);//先转
+            // pcl::transformPointCloud(*allPlanes[i], *allPlanes[i], Twc.matrix());//先转
+            for(int j = 0; j < numPoint; ++j)
+            {
+                Eigen::Vector3d tmpPoint(allPlanes[i]->points[j].x, allPlanes[i]->points[j].y, allPlanes[i]->points[j].z);
+                Eigen::Vector3d tmpPointTransed = kkk_trans * tmpPoint;
+                allPlanes[i]->points[j].x = tmpPointTransed[0];
+                allPlanes[i]->points[j].y = tmpPointTransed[1];
+                allPlanes[i]->points[j].z = tmpPointTransed[2];
+                // if(j == 100)
+                // {
+                //     std::cout << "转换前的点：" << tmpPoint.transpose() << std::endl;
+                //     std::cout << "转换后的点：" << tmpPointTransed.transpose() << std::endl;
+                // }
+                
+            }
             sor.setInputCloud(allPlanes[i]);//给滤波对象设置需过滤的点云
             sor.setLeafSize(0.01f, 0.01f, 0.01f);//设置滤波时创建的体素大小为1cm*1cm*1cm的立方体
             sor.filter(*cloud_filtered);//执行滤波处理，存储输出为cloud_filtered
@@ -343,9 +578,39 @@ private:
             tmpCenterPoint.x = allCenterPoint[i].x/(float)numPoint;
             tmpCenterPoint.y = allCenterPoint[i].y/(float)numPoint;
             tmpCenterPoint.z = allCenterPoint[i].z/(float)numPoint;
+            Eigen::Vector3d center_eigen(tmpCenterPoint.x, tmpCenterPoint.y, tmpCenterPoint.z);
+
+            center_eigen = kkk_trans * center_eigen;
+            tmpCenterPoint.x = (float)center_eigen[0];
+            tmpCenterPoint.y = (float)center_eigen[1];
+            tmpCenterPoint.y = (float)center_eigen[2];
             myPointCloud::Ptr plane_points = pcl::make_shared<myPointCloud>();
             Eigen::Vector3d normal;
             getPlanePoints(plane_points, normal, cloud_filtered, tmpCenterPoint);
+            std::cout << "平面的法向量为：" << normal.transpose() << std::endl;
+            // if(normal[2] < 0.7 && normal[2] > -0.7)
+            //     continue;
+            // *CloudNoGround += *plane_points;
+            if(i == minIndex)//地面
+            {
+                ground_normal = normal;
+                continue;
+            }
+                
+            int classTerr; //0为台阶，1为斜坡，2为其他
+            if(normal[2] < 0.6 && normal[2] > -0.6)
+            {
+                classTerr = 2;
+                continue;
+            }
+            else if(normal[2] < 0.75 && normal[2] > -0.75)
+            {
+                classTerr = 1;
+            }
+            else
+            {
+                classTerr = 0;
+            }
             pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_hull = pcl::make_shared<myPointCloud>();
             pcl::ConcaveHull<pcl::PointXYZ> chull;
             chull.setInputCloud(plane_points);
@@ -354,8 +619,53 @@ private:
             vector<Eigen::Vector3d> poly;
             poly.reserve(cloud_hull->size());
 
-            Eigen::Vector3d center_eigen(tmpCenterPoint.x, tmpCenterPoint.y, tmpCenterPoint.z);
             vector<Eigen::Vector3d> rectPoint = fitRect(*cloud_hull, normal, center_eigen);
+            double length0 = (rectPoint[0] - rectPoint[1]).norm();
+            double length1 = (rectPoint[1] - rectPoint[2]).norm();
+            double length2 = (rectPoint[2] - rectPoint[3]).norm();
+            double length3 = (rectPoint[3] - rectPoint[0]).norm();
+            
+            double dot_product = normal.dot(ground_normal);
+            // 计算向量A的模长
+            double norm_normal = normal.norm();
+            // 计算向量B的模长
+            double norm_ground_normal = ground_normal.norm();
+            // 计算角度（弧度）
+            double angle_radians = std::acos(dot_product / (norm_normal * norm_ground_normal));
+            // 将弧度转换为度
+            double angle_degrees = angle_radians * (180.0 / M_PI);  
+            if(classTerr == 0)
+            {
+                // std::cout << "----------对于平面 " << to_string(i) << ": ----------" << std::endl;
+                std::cout << "台阶角点0坐标: " <<  rectPoint[0].transpose() << ", 相对参考点距离为：" << (rectPoint[0]-refPoint).norm() << std::endl;
+                std::cout << refPoint.transpose() << std::endl;
+                std::cout << "台阶角点1坐标: " <<  rectPoint[1].transpose() << ", 相对参考点距离为：" << (rectPoint[1]-refPoint).norm() << std::endl;
+                std::cout << "台阶角点2坐标: " <<  rectPoint[2].transpose() << ", 相对参考点距离为：" << (rectPoint[2]-refPoint).norm() << std::endl;
+                std::cout << "台阶角点3坐标: " <<  rectPoint[3].transpose() << ", 相对参考点距离为：" << (rectPoint[3]-refPoint).norm() << std::endl;
+                std::cout << "台阶长度为： " << std::max(length0, length1) << "m." << std::endl;
+                std::cout << "台阶宽度为： " << std::min(length0, length1) << "m." << std::endl;
+                // std::cout << "Center Point is: " << center_eigen.transpose() << std::endl;
+                // std::cout << "Norm vector is " << normal.transpose() << std::endl;
+                std::cout << "台阶高度为:  " << center_eigen[2] - height_ground << "m."<< std::endl;
+                // 输出角度
+                std::cout << "台阶角度为:  " << angle_degrees << "°." <<  std::endl;
+            }          
+            else if(classTerr == 1)
+            {
+                std::cout << "----------对于台阶 " << to_string(i) << ": ----------" << std::endl;
+                std::cout << "斜坡角点0坐标: " <<  rectPoint[0].transpose() << std::endl;
+                std::cout << "斜坡角点1坐标: " <<  rectPoint[1].transpose() << std::endl;
+                std::cout << "斜坡角点2坐标: " <<  rectPoint[2].transpose() << std::endl;
+                std::cout << "斜坡角点3坐标: " <<  rectPoint[3].transpose() << std::endl;
+                std::cout << "斜坡长度为： " << std::max(length0, length1) << "m." << std::endl;
+                std::cout << "斜坡宽度为： " << std::min(length0, length1) << "m." << std::endl;
+                // std::cout << "Center Point is: " << center_eigen.transpose() << std::endl;
+                // std::cout << "Norm vector is " << normal.transpose() << std::endl;
+                std::cout << "斜坡高度为:  " << center_eigen[2] - height_ground << "m."<< std::endl;
+                // 输出角度
+                std::cout << "斜坡角度为:  " << angle_degrees << "°." <<  std::endl;
+            }
+
             int k = 0;
             for(int j = 0; j < plane_points->size(); j ++)
             {
@@ -392,7 +702,7 @@ private:
             }
                 //-----------------------------------------
             visualization_msgs::Marker marker;
-            marker.header.frame_id = "camera";
+            marker.header.frame_id = "3dmap";
             marker.header.stamp = ros::Time::now();
             marker.ns = "hull_" + std::to_string(i);
             marker.id = i;
@@ -441,21 +751,25 @@ private:
             ma.markers.push_back(marker);
         }
         t3 = std::chrono::steady_clock::now();
-        sensor_msgs::PointCloud2 output1, output2;
+        sensor_msgs::PointCloud2 output1, output2, output3;
         pcl::toROSMsg(*CloudColoredOutput, output1);
         pcl::toROSMsg(*CloudEdgeOutput, output2);
-        output1.header.frame_id = "camera";
-        output2.header.frame_id = "camera";
+        pcl::toROSMsg(*CloudNoGround, output3);
+        output1.header.frame_id = "3dmap";
+        output2.header.frame_id = "3dmap";
+        output3.header.frame_id = "3dmap";
         output1.header.stamp = ros::Time::now();
         output2.header.stamp = ros::Time::now();
+        output3.header.stamp = ros::Time::now();
         {
             pcl_pub1.publish(output1);
             pcl_pub2.publish(output2);
+            pcl_pub3.publish(output3);
             markarry_pub.publish(ma);
         }
 
-        cout << "平面分割: "<< std::chrono::duration_cast<std::chrono::duration<double>>( t1 - t0 ).count()*1000 << " ms ." <<endl;
-        cout << "处理每个平面: "<< std::chrono::duration_cast<std::chrono::duration<double>>( t3 - t2 ).count()*1000 << " ms ." <<endl;
+        cout << "平面分割用时: "<< std::chrono::duration_cast<std::chrono::duration<double>>( t1 - t0 ).count()*1000 << " ms." <<endl;
+        cout << "平面处理用时: "<< std::chrono::duration_cast<std::chrono::duration<double>>( t3 - t2 ).count()*1000 << " ms." <<endl;
 
     }
 
@@ -464,6 +778,29 @@ private:
 
 int main(int argc, char** argv)
 {
+    // Eigen::Isometry3d M;
+    // double theta = 152.5/57.3;
+    // M.matrix() << 0, cos(theta), sin(theta), 0.1412,
+    //            -1, 0, 0, 0,
+    //            0, -sin(theta), cos(theta), -0.2474,
+    //            0, 0, 0, 1;
+    // std::cout << M.matrix() << std::endl;
+    // std::cout << "----------------" << std::endl;
+    // std::cout << M.inverse().matrix() << std::endl;
+    //     std::cout << "----------------" << std::endl;
+    // Eigen::Vector3d euler_angles = M.inverse().rotation().eulerAngles(0, 2, 1); // ZYX顺序
+    // std::cout << "----------------" << std::endl;
+    // std::cout << "Translation (m): " << M.inverse().translation().transpose() << std::endl;
+    // std::cout << "Euler angles (rad): " << euler_angles.transpose() << std::endl;
+
+    // // 将弧度转换为角度
+    // Eigen::Vector3d euler_angles_deg = euler_angles * 180.0 / M_PI;
+    // std::cout << "Euler angles (deg): " << euler_angles_deg.transpose() << std::endl;
+    // Eigen::Quaterniond quaternion(M.inverse().matrix().block<3, 3>(0, 0));
+    // std::cout << "Quaternion: " << quaternion.coeffs().transpose() << std::endl;
+    // Eigen::Quaterniond quaternion0(M.matrix().block<3, 3>(0, 0));
+    // std::cout << "Quaternion0: " << quaternion0.coeffs().transpose() << std::endl;
+    std::cout << "??" << std::endl;
     ros::init(argc, argv, "color_pointcloud_publisher");
     PlaneDetectAndPub PDAP;
     ros::spin();
