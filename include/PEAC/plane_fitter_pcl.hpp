@@ -159,7 +159,8 @@ template<> std::string iniGet(std::string key, std::string default_value) {
 }//global
 int index_image = 1;
 vector<polytopic> result_polytopics;
-void processOneFrame(pcl::PointCloud<pcl::PointXYZ>& cloud, const std::string& outputFilePrefix, cv::Mat &imgSeg)
+void processOneFrame(pcl::PointCloud<pcl::PointXYZ>& cloud, const std::string& outputFilePrefix, cv::Mat &imgSeg,
+					std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormalAndCenter)
 {
 	using global::pf;
 	cv::Mat seg(cloud.height, cloud.width, CV_8UC3);
@@ -168,7 +169,7 @@ void processOneFrame(pcl::PointCloud<pcl::PointXYZ>& cloud, const std::string& o
 	ImageXYZ Ixyz(cloud);
 	Timer timer(1000);
 	timer.tic();
-	pf.run(&Ixyz,imgSeg, 0, &seg);
+	pf.run(&Ixyz,imgSeg, 0, &seg, planeNormalAndCenter);
 	double process_ms=timer.toc();
 	// std::cout<<process_ms<<" ms"<<std::endl;
 
@@ -217,7 +218,8 @@ void processOneFrame(pcl::PointCloud<pcl::PointXYZ>& cloud, const std::string& o
 	}
 }
 
-int process(pcl::PointCloud<pcl::PointXYZ> & orderd_cloud, ahc::FitterAllParams & parameters, cv::Mat &imgSeg) {
+int process(pcl::PointCloud<pcl::PointXYZ> & orderd_cloud, ahc::FitterAllParams & parameters, cv::Mat &imgSeg, 
+			std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormalAndCenter) {
 	// global::iniLoad("../plane_fitter_pcd.ini");
 	const double unitScaleFactor = global::iniGet<double>("unitScaleFactor", 1.0f);
     // std::cout<<"unitScaleFactor: "<<unitScaleFactor<<std::endl;
@@ -268,7 +270,7 @@ int process(pcl::PointCloud<pcl::PointXYZ> & orderd_cloud, ahc::FitterAllParams 
 				orderd_cloud, orderd_cloud,
 				Eigen::Affine3f(Eigen::UniformScaling<float>(
 				(float)unitScaleFactor)));
-    processOneFrame(orderd_cloud, outputFilePrefix, imgSeg);
+    processOneFrame(orderd_cloud, outputFilePrefix, imgSeg, planeNormalAndCenter);
 	
 	return 0;
 }
@@ -306,9 +308,9 @@ public:
 	// 	process(cloud, parameters);
 	// 	polytopics = result_polytopics;
 	// }
-	void run(cv::Mat &imgSeg)
+	void run(cv::Mat &imgSeg, std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormalAndCenter)
 	{
-		process(cloud, parameters, imgSeg);
+		process(cloud, parameters, imgSeg, planeNormalAndCenter);
 		polytopics = result_polytopics;
 	}
 	~PlanarContourExtraction()
