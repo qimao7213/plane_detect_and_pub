@@ -533,7 +533,7 @@ private:
         // for(int i = 1; i <= maxLabel; i++)
         // {
         //     allCenterPoint[i] = allCenterPoint[i] * Twc.inverse().matrix() * transformMatrixRefine * Twc.matrix();
-        // }
+        // } 
         Eigen::Vector3d ground_normal(0, 0, 1);
         //遍历每一个平面
         //0是没有被检测出来的区域
