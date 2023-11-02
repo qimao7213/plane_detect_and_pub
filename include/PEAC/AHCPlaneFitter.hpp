@@ -339,7 +339,7 @@ namespace ahc {
 						(int)(this->extractedPlanes[i]->N*1.2f));
 				}
 			}
-			std::cout<<"after extractedPlanes, planes total is "<<extractedPlanes.size()<<std::endl;
+			std::cout<<"提取的平面数量：   "<<extractedPlanes.size()<<std::endl;
 			std::vector<cv::Mat> planes(extractedPlanes.size()); 
 			for (size_t i = 0; i < extractedPlanes.size(); i++)
 			{
@@ -391,10 +391,15 @@ namespace ahc {
 				// cv::waitKey(500);
 #endif
 				cv::Mat onePlane = planes.at(i);
+<<<<<<< HEAD
 				Eigen::Vector3d normal(extractedPlanes.at(i)->normal[0], extractedPlanes.at(i)->normal[1], extractedPlanes.at(i)->normal[2]);
 				Eigen::Vector3d center(extractedPlanes.at(i)->center[0], extractedPlanes.at(i)->center[1], extractedPlanes.at(i)->center[2]);
 				planeNormals.push_back(normal[0], normal[1], normal[2], center[0], center[1], center[2]);
 				
+=======
+				Eigen::Vector3f normal(extractedPlanes.at(i)->normal[0], extractedPlanes.at(i)->normal[1], extractedPlanes.at(i)->normal[2]);
+				std::cout << "在平面提取算法里面：" << normal.transpose() << std::endl;
+>>>>>>> 82ed347258ce4aad128277e1011e9c16b2a94767
 				// if(extractedPlanes.at(i)->normal[2] > 0.7 || extractedPlanes.at(i)->normal[2] < -0.7)
 				// {
 				// 	continue;
