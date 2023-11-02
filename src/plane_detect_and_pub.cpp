@@ -283,7 +283,7 @@ private:
         catch(tf::TransformException &ex)
         {
             ROS_ERROR("%s", ex.what());
-            return;
+            return; 
         }
         std::cout << transform2_.getRotation().x() << ", " << transform2_.getRotation().y()  << ", " << transform2_.getRotation().z()  << ", " <<  transform2_.getRotation().w() << std::endl;
         double qx = transform2_.getRotation().x();
