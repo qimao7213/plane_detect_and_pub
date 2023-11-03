@@ -185,9 +185,9 @@ namespace ahc {
 		 */
 		double run(const Image3D* pointsIn,
 			cv::Mat &imgSeg,
+			std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormalAndCenter,
 			std::vector<std::vector<int>>* pMembership=0,
 			cv::Mat* pSeg=0, 
-			std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormals,
 			const std::vector<int> * const pIdxMap=0, bool verbose=0)
 		{
 			if(!pointsIn) return 0;
@@ -211,7 +211,7 @@ namespace ahc {
 			timer.toctic("cluster time");
 #endif
 			if(doRefine) {
-				this->refineDetails(pMembership, pIdxMap, pSeg, imgSeg, planeNormals);
+				this->refineDetails(pMembership, pIdxMap, pSeg, imgSeg, planeNormalAndCenter);
 #ifdef EVAL_SPEED
 				timer.toctic("refine time");
 #endif
@@ -276,9 +276,11 @@ namespace ahc {
 			const std::vector<int> * const pIdxMap, //if pIdxMap!=0 pMembership->at(i).at(j)=pIdxMap(pixIdx)
 			cv::Mat* pSeg, 
 			cv::Mat &imgSeg,
-			std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormals)
+			std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>>& planeNormalAndCenter)
 		{
-			planeNormals.push_back(Vector6d(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+			Vector6d tmpVec6d;
+			tmpVec6d << 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+			planeNormalAndCenter.push_back(tmpVec6d);
 			if(pMembership==0 && pSeg==0) return;
 			std::vector<bool> isValidExtractedPlane; //some planes might be eroded completely
 			this->findBlockMembership(isValidExtractedPlane);
@@ -391,15 +393,12 @@ namespace ahc {
 				// cv::waitKey(500);
 #endif
 				cv::Mat onePlane = planes.at(i);
-<<<<<<< HEAD
 				Eigen::Vector3d normal(extractedPlanes.at(i)->normal[0], extractedPlanes.at(i)->normal[1], extractedPlanes.at(i)->normal[2]);
 				Eigen::Vector3d center(extractedPlanes.at(i)->center[0], extractedPlanes.at(i)->center[1], extractedPlanes.at(i)->center[2]);
-				planeNormals.push_back(normal[0], normal[1], normal[2], center[0], center[1], center[2]);
+				Vector6d tmpVec6d;
+				tmpVec6d << normal[0], normal[1], normal[2], center[0], center[1], center[2];
+				planeNormalAndCenter.push_back(tmpVec6d);
 				
-=======
-				Eigen::Vector3f normal(extractedPlanes.at(i)->normal[0], extractedPlanes.at(i)->normal[1], extractedPlanes.at(i)->normal[2]);
-				std::cout << "在平面提取算法里面：" << normal.transpose() << std::endl;
->>>>>>> 82ed347258ce4aad128277e1011e9c16b2a94767
 				// if(extractedPlanes.at(i)->normal[2] > 0.7 || extractedPlanes.at(i)->normal[2] < -0.7)
 				// {
 				// 	continue;

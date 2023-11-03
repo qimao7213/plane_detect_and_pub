@@ -169,7 +169,7 @@ void processOneFrame(pcl::PointCloud<pcl::PointXYZ>& cloud, const std::string& o
 	ImageXYZ Ixyz(cloud);
 	Timer timer(1000);
 	timer.tic();
-	pf.run(&Ixyz,imgSeg, 0, &seg, planeNormalAndCenter);
+	pf.run(&Ixyz,imgSeg, planeNormalAndCenter, 0, &seg);
 	double process_ms=timer.toc();
 	// std::cout<<process_ms<<" ms"<<std::endl;
 

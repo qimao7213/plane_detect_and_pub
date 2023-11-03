@@ -50,18 +50,18 @@ typedef Eigen::Matrix<double,6,1> Vector6d;
 // const float depthScale = 5000.0;
 
 //--------i515-------------
-const float cx = 325.44140625;
-const float cy = 236.3984375;
-const float fx = 460.2265625;
-const float fy = 460.2265625;
-const float depthScale = 1000.0;
+// const float cx = 325.44140625;
+// const float cy = 236.3984375;
+// const float fx = 460.2265625;
+// const float fy = 460.2265625;
+// const float depthScale = 1000.0;
 
 //--------D455-------------
-// const float cx = 328.57140625;
-// const float cy = 240.3284375;
-// const float fx = 390.2265625;
-// const float fy = 390.2265625;
-// const float depthScale = 1000.0;
+const float cx = 328.57140625;
+const float cy = 240.3284375;
+const float fx = 390.2265625;
+const float fy = 390.2265625;
+const float depthScale = 1000.0;
 
 void replaceZeroDepth_and_generatePointCloud(cv::Mat& depthImage, const myPointCloud::Ptr Cloud) 
 {
@@ -384,13 +384,9 @@ private:
         std::vector<Vector6d, Eigen::aligned_allocator<Vector6d>> planeNormalAndCenter;
         PlanarContourExtraction pce(*Cloud);
         t0 = std::chrono::steady_clock::now();
-<<<<<<< HEAD
         pce.run(imgSeg, planeNormalAndCenter);
-=======
-        pce.run(imgSeg);
         cv::imshow("imgSeg", imgSeg);
-        cv::waitKey(30);
->>>>>>> 82ed347258ce4aad128277e1011e9c16b2a94767
+        cv::waitKey(1);
         t1 = std::chrono::steady_clock::now();
         double maxLabel;
         cv::minMaxLoc(imgSeg, 0, &maxLabel);
@@ -631,15 +627,6 @@ private:
             double length1 = (rectPoint[1] - rectPoint[2]).norm();
             double length2 = (rectPoint[2] - rectPoint[3]).norm();
             double length3 = (rectPoint[3] - rectPoint[0]).norm();
-<<<<<<< HEAD
-            std::cout << "----------对于平面 " << to_string(i) << ": ----------" << std::endl;
-            std::cout << "Point0: " <<  rectPoint[0].transpose() << std::endl;
-            std::cout << "Point1: " <<  rectPoint[1].transpose() << std::endl;
-            std::cout << "Point2: " <<  rectPoint[2].transpose() << std::endl;
-            std::cout << "Point3: " <<  rectPoint[3].transpose() << std::endl;
-            std::cout << "4 Edges' length: " << length0 << ", " << length1 << ", " << length2 << ", " << length3 << std::endl;
-            std::cout << "Center Point is: " << center_eigen.transpose() << std::endl;
-=======
             
             double dot_product = normal.dot(ground_normal);
             // 计算向量A的模长
@@ -682,7 +669,6 @@ private:
                 std::cout << "斜坡角度为:  " << angle_degrees << "°." <<  std::endl;
             }
 
->>>>>>> 82ed347258ce4aad128277e1011e9c16b2a94767
             int k = 0;
             for(int j = 0; j < plane_points->size(); j ++)
             {
@@ -795,33 +781,29 @@ private:
 
 int main(int argc, char** argv)
 {
-    // Eigen::Isometry3d M;
-    // double theta = 152.5/57.3;
-    // M.matrix() << 0, cos(theta), sin(theta), 0.1412,
-    //            -1, 0, 0, 0,
-    //            0, -sin(theta), cos(theta), -0.2474,
-    //            0, 0, 0, 1;
-    // std::cout << M.matrix() << std::endl;
-    // std::cout << "----------------" << std::endl;
-    // std::cout << M.inverse().matrix() << std::endl;
-    //     std::cout << "----------------" << std::endl;
-    // Eigen::Vector3d euler_angles = M.inverse().rotation().eulerAngles(0, 2, 1); // ZYX顺序
-    // std::cout << "----------------" << std::endl;
-    // std::cout << "Translation (m): " << M.inverse().translation().transpose() << std::endl;
-    // std::cout << "Euler angles (rad): " << euler_angles.transpose() << std::endl;
+    Eigen::Isometry3d M;
+    double theta = 151/57.3;
+    M.matrix() << 0, cos(theta), sin(theta), 0.1412,
+               -1, 0, 0, 0,
+               0, -sin(theta), cos(theta), -0.2474,
+               0, 0, 0, 1;
+    std::cout << M.matrix() << std::endl;
+    std::cout << "----------------" << std::endl;
+    std::cout << M.inverse().matrix() << std::endl;
+        std::cout << "----------------" << std::endl;
+    Eigen::Vector3d euler_angles = M.inverse().rotation().eulerAngles(0, 2, 1); // ZYX顺序
+    std::cout << "----------------" << std::endl;
+    std::cout << "Translation (m): " << M.inverse().translation().transpose() << std::endl;
+    std::cout << "Euler angles (rad): " << euler_angles.transpose() << std::endl;
 
-    // // 将弧度转换为角度
-    // Eigen::Vector3d euler_angles_deg = euler_angles * 180.0 / M_PI;
-    // std::cout << "Euler angles (deg): " << euler_angles_deg.transpose() << std::endl;
-    // Eigen::Quaterniond quaternion(M.inverse().matrix().block<3, 3>(0, 0));
-    // std::cout << "Quaternion: " << quaternion.coeffs().transpose() << std::endl;
-    // Eigen::Quaterniond quaternion0(M.matrix().block<3, 3>(0, 0));
-    // std::cout << "Quaternion0: " << quaternion0.coeffs().transpose() << std::endl;
-<<<<<<< HEAD
-
-=======
+    // 将弧度转换为角度
+    Eigen::Vector3d euler_angles_deg = euler_angles * 180.0 / M_PI;
+    std::cout << "Euler angles (deg): " << euler_angles_deg.transpose() << std::endl;
+    Eigen::Quaterniond quaternion(M.inverse().matrix().block<3, 3>(0, 0));
+    std::cout << "Quaternion: " << quaternion.coeffs().transpose() << std::endl;
+    Eigen::Quaterniond quaternion0(M.matrix().block<3, 3>(0, 0));
+    std::cout << "Quaternion0: " << quaternion0.coeffs().transpose() << std::endl;
     std::cout << "??" << std::endl;
->>>>>>> 82ed347258ce4aad128277e1011e9c16b2a94767
     ros::init(argc, argv, "color_pointcloud_publisher");
     PlaneDetectAndPub PDAP;
     ros::spin();
